@@ -1,0 +1,127 @@
+Error Volume =
+
+VAR ChartType = SELECTEDVALUE(ChartToggle[Type], "Count")
+VAR ExclusionType = SELECTEDVALUE(ExclusionToggle[Value], "N")
+
+-- =====================
+-- SHARED: Total Payment (denominator, ignore processing_dt)
+-- =====================
+VAR TotalPayment =
+    CALCULATE(
+        SUM(SIRA_Submission_Error_Report[paymentAmt_PIT_Total]),
+        REMOVEFILTERS(SIRA_Submission_Error_Report[processing_dt])
+    )
+
+-- =====================
+-- COUNT MODE - Critical$ branch
+-- =====================
+
+-- A: sum of pit_payment_amt per claim (Critical$, PaymentFlag=1)
+VAR A =
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            SUM(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[exclusion_type] = ExclusionType,
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            SIRA_Submission_Error_Report[_PaymentFlag] = "1"
+        )
+    )
+
+-- B: Total payment denominator
+VAR B = TotalPayment
+
+-- C: max pit_payment_amt per claim+rule
+VAR C =
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[exclusion_type] = ExclusionType,
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+        )
+    )
+
+-- D: Total payment with dimension toggle
+VAR D = TotalPayment
+
+-- =====================
+-- COUNT MODE - Suspect branch
+-- =====================
+
+-- E: distinct source_claim_nbr (Suspect)
+VAR E =
+    CALCULATE(
+        DISTINCTCOUNT(SIRA_Submission_Error_Report[source_claim_nbr]),
+        SIRA_Submission_Error_Report[exclusion_type] = ExclusionType,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+    )
+
+-- F: distinct claim_nbr total
+VAR F =
+    CALCULATE(
+        DISTINCTCOUNT(SIRA_Submission_Error_Report[claim_nbr]),
+        REMOVEFILTERS(SIRA_Submission_Error_Report[processing_dt])
+    )
+
+-- =====================
+-- DOLLAR VALUE MODE
+-- =====================
+
+-- G: sum aggr pit_payment_amt (dollar mode)
+VAR G =
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            SUM(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[exclusion_type] = ExclusionType,
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            SIRA_Submission_Error_Report[_PaymentFlag] = "1"
+        )
+    )
+
+-- H: Total payment denominator
+VAR H = TotalPayment
+
+-- I: max pit_payment_amt per claim+rule+processing_dt
+VAR I =
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[exclusion_type] = ExclusionType,
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+        )
+    )
+
+-- J: max pit_payment_amt with dimension toggle
+VAR J = TotalPayment
+
+-- =====================
+-- SEVERITY CHECK
+-- =====================
+VAR IsCritical =
+    CALCULATE(
+        COUNTROWS(SIRA_Submission_Error_Report),
+        SIRA_Submission_Error_Report[Rule Severity] = "Critical$"
+    ) > 0
+
+-- =====================
+-- RETURN
+-- =====================
+RETURN
+SWITCH(
+    TRUE(),
+    ChartType = "Count" && IsCritical,
+        DIVIDE(A, B) * DIVIDE(C, D),
+
+    ChartType = "Count" && NOT IsCritical,
+        DIVIDE(E, F),
+
+    -- Dollar Value mode
+    DIVIDE(G, H) * DIVIDE(I, J)
+)
