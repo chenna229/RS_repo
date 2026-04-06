@@ -1,43 +1,30 @@
--- Check Suspect amount for EML specifically
-Test_EML_Suspect =
-CALCULATE(
-    SUMX(
-        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
-        CALCULATE(
-            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-            SIRA_Submission_Error_Report[exclusion_type] = "N"
-        )
-    ),
-    SIRA_Submission_Error_Report[Insurer] = "EML",
-    SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
-)
+Error Volume = 
 
+VAR ChartType = 
+    SELECTEDVALUE(ChartToggle[TYPE], "Count")
 
--- Check if EML difference = Suspect amount
--- Difference = 446,114 - 427,276 = 18,838
-Test_EML_Difference =
-CALCULATE(
-    SUMX(
-        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
-        CALCULATE(
-            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-            SIRA_Submission_Error_Report[exclusion_type] = "N",
-            SIRA_Submission_Error_Report[Rule Severity] = "Critical$"
-        )
-    ),
-    SIRA_Submission_Error_Report[Insurer] = "EML"
-)
+VAR vLatestProcessingdate = 
+    MAX(SIRA_Submission_Error_Report[processing_dt])
 
-
-VAR SuspectRules =
+-- Suspect rules excluded globally (ignore all filters)
+VAR SuspectRules = 
     CALCULATETABLE(
         VALUES(SIRA_Submission_Error_Report[rule_cd]),
+        ALL(SIRA_Submission_Error_Report),
         SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
     )
 
-VAR DollarResult =
+-- COUNT branch
+VAR CountResult = 
+    CALCULATE(
+        COUNTROWS(SIRA_Submission_Error_Report),
+        SIRA_Submission_Error_Report[exclusion_type] = "N",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate
+    )
+
+-- DOLLAR VALUE branch
+VAR DollarResult = 
     SUMX(
         VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
         CALCULATE(
@@ -45,6 +32,10 @@ VAR DollarResult =
             SIRA_Submission_Error_Report[exclusion_type] = "N",
             SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
             SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate,
             NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
         )
     )
+
+RETURN 
+    IF(ChartType = "Count", CountResult, DollarResult)
