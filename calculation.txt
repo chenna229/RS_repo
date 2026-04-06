@@ -3,16 +3,17 @@ Error Rate =
 VAR CurrentPeriod =
     MAX(SIRA_Submission_Error_Report[submission_period])
 
+-- Previous period as TEXT
 VAR PreviousPeriod =
-    INT(FORMAT(
+    FORMAT(
         EDATE(
             DATE(
-                LEFT(FORMAT(CurrentPeriod, "000000"), 4),
-                RIGHT(FORMAT(CurrentPeriod, "000000"), 2),
+                LEFT(CurrentPeriod, 4),
+                RIGHT(CurrentPeriod, 2),
                 1
             ),
         -1),
-    "YYYYMM"))
+    "YYYYMM")
 
 VAR PrevMaxProcessingDt =
     CALCULATE(
