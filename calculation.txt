@@ -1,16 +1,16 @@
 let
-    // Reference original table
     Source = SIRA_Submission_Error_Report,
 
-    // Step 1: Filter required rows
+    // Step 1: Filter required rows including March 2026
     FilteredRows = Table.SelectRows(
         Source,
         each [exclusion_type] = "N"
             and [ErrorType] = "Proactive"
             and [Rule Severity] = "Critical$"
+            and [submission_period] = 202603
     ),
 
-    // Step 2: Find MAX processing_dt
+    // Step 2: Find MAX processing_dt for March
     MaxDate = List.Max(FilteredRows[processing_dt]),
 
     // Step 3: Filter to latest processing date only
@@ -24,18 +24,14 @@ let
         FilteredByDate,
         {
             "source_claim_nbr",
-            "processing_dt",
             "pit_payment_amt"
         }
     ),
 
-    // Step 5: Group by claim + processing_dt
+    // Step 5: Group by claim - MAX payment per claim
     GroupedRows = Table.Group(
         SelectedColumns,
-        {
-            "source_claim_nbr",
-            "processing_dt"
-        },
+        {"source_claim_nbr"},
         {
             {
                 "max_pit_payment",
