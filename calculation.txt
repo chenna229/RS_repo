@@ -1,4 +1,4 @@
-Test_A_Fix2 =
+Test_A_Fix3 =
 
 VAR SuspectRules =
     CALCULATETABLE(
@@ -15,21 +15,30 @@ VAR BaseTable =
         NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
     )
 
-VAR A =
-    SUMX(
+VAR GroupedTable =
+    ADDCOLUMNS(
         SUMMARIZE(
             BaseTable,
             SIRA_Submission_Error_Report[source_claim_nbr],
             SIRA_Submission_Error_Report[processing_dt]
         ),
-        MAXX(
-            FILTER(
-                BaseTable,
-                SIRA_Submission_Error_Report[source_claim_nbr] = EARLIER(SIRA_Submission_Error_Report[source_claim_nbr])
-                && SIRA_Submission_Error_Report[processing_dt] = EARLIER(SIRA_Submission_Error_Report[processing_dt])
-            ),
-            SIRA_Submission_Error_Report[pit_payment_amt]
+        "MaxAmt",
+        CALCULATE(
+            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+            BaseTable
         )
     )
 
+VAR A = SUMX(GroupedTable, [MaxAmt])
+
 RETURN A
+
+
+-- Simple MAX without grouping
+Test_SimpleMax =
+CALCULATE(
+    MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+    SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+    SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+    SIRA_Submission_Error_Report[exclusion_type] = "N"
+)
