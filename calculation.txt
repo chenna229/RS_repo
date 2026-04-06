@@ -1,45 +1,32 @@
 let
     Source = SIRA_Submission_Error_Report,
 
-    // Step 1: Filter required rows including March 2026
+    // Without Rule Severity filter
     FilteredRows = Table.SelectRows(
         Source,
         each [exclusion_type] = "N"
             and [ErrorType] = "Proactive"
-            and [Rule Severity] = "Critical$"
             and [submission_period] = 202603
+            and [processing_dt] = #date(2026, 4, 4)
     ),
 
-    // Step 2: Find MAX processing_dt for March
-    MaxDate = List.Max(FilteredRows[processing_dt]),
-
-    // Step 3: Filter to latest processing date only
-    FilteredByDate = Table.SelectRows(
-        FilteredRows,
-        each [processing_dt] = MaxDate
+    // Count distinct claims WITH Critical$
+    CriticalClaims = List.Distinct(
+        Table.SelectRows(
+            FilteredRows,
+            each [Rule Severity] = "Critical$"
+        )[source_claim_nbr]
     ),
 
-    // Step 4: Keep only needed columns
-    SelectedColumns = Table.SelectColumns(
-        FilteredByDate,
-        {
-            "source_claim_nbr",
-            "pit_payment_amt"
-        }
+    // Count distinct claims WITHOUT Rule Severity filter
+    AllClaims = List.Distinct(
+        FilteredRows[source_claim_nbr]
     ),
 
-    // Step 5: Group by claim - MAX payment per claim
-    GroupedRows = Table.Group(
-        SelectedColumns,
-        {"source_claim_nbr"},
-        {
-            {
-                "max_pit_payment",
-                each List.Max([pit_payment_amt]),
-                type number
-            }
-        }
+    Result = #table(
+        {"Critical$ Claims", "All Claims"},
+        {{List.Count(CriticalClaims), List.Count(AllClaims)}}
     )
 
 in
-    GroupedRows
+    Result
