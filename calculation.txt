@@ -1,4 +1,35 @@
-Test_A_Fix3 =
+-- Check Suspect amount for EML specifically
+Test_EML_Suspect =
+CALCULATE(
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            SIRA_Submission_Error_Report[exclusion_type] = "N"
+        )
+    ),
+    SIRA_Submission_Error_Report[Insurer] = "EML",
+    SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
+)
+
+
+-- Check if EML difference = Suspect amount
+-- Difference = 446,114 - 427,276 = 18,838
+Test_EML_Difference =
+CALCULATE(
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+        CALCULATE(
+            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            SIRA_Submission_Error_Report[exclusion_type] = "N",
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$"
+        )
+    ),
+    SIRA_Submission_Error_Report[Insurer] = "EML"
+)
+
 
 VAR SuspectRules =
     CALCULATETABLE(
@@ -6,39 +37,14 @@ VAR SuspectRules =
         SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
     )
 
-VAR BaseTable =
-    CALCULATETABLE(
-        SIRA_Submission_Error_Report,
-        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-    )
-
-VAR GroupedTable =
-    ADDCOLUMNS(
-        SUMMARIZE(
-            BaseTable,
-            SIRA_Submission_Error_Report[source_claim_nbr],
-            SIRA_Submission_Error_Report[processing_dt]
-        ),
-        "MaxAmt",
+VAR DollarResult =
+    SUMX(
+        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
         CALCULATE(
             MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            BaseTable
+            SIRA_Submission_Error_Report[exclusion_type] = "N",
+            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+            NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
         )
     )
-
-VAR A = SUMX(GroupedTable, [MaxAmt])
-
-RETURN A
-
-
--- Simple MAX without grouping
-Test_SimpleMax =
-CALCULATE(
-    MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-    SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-    SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-    SIRA_Submission_Error_Report[exclusion_type] = "N"
-)
