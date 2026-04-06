@@ -1,73 +1,19 @@
-Error Volume =
+sum(aggr(
+    max({<exclusion_type={"N"},
+         [Rule Severity]={"Critical$"},
+         ErrorType={"Proactive"}>
+        } pit_payment_amt),
+    source_claim_nbr
+))
 
-VAR ChartType = 
-    SELECTEDVALUE(ChartToggle[TYPE], "Count")
 
-VAR vLatestProcessingdate = 
-    MAX(SIRA_Submission_Error_Report[processing_dt])
-
-VAR SuspectRules =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[rule_cd]),
-        ALL(SIRA_Submission_Error_Report),
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
-    )
-
--- Step 1: Get valid AggrKeys for selected Insurer
-VAR InsurerAggrKeys =
-    CALCULATETABLE(
-        DISTINCT(Sira_junction_table[%AggrKey]),
-        ALLEXCEPT(
-            Sira_junction_table,
-            Sira_junction_table[Insurer]
-        )
-    )
-
--- Step 2: Get distinct claims matching those keys
--- at processing_dt level ONLY
-VAR ValidClaims =
-    CALCULATETABLE(
-        DISTINCT(SIRA_Submission_Error_Report[source_claim_nbr]),
-        FILTER(
-            SIRA_Submission_Error_Report,
-            SIRA_Submission_Error_Report[%AggrKey] 
-                IN InsurerAggrKeys
-            && SIRA_Submission_Error_Report[exclusion_type] = "N"
-            && SIRA_Submission_Error_Report[Rule Severity] = "Critical$"
-            && SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-            && SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate
-            && NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-        )
-    )
-
--- COUNT branch
-VAR CountResult =
+Test_Total_NoInsurer =
+SUMX(
+    VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
     CALCULATE(
-        COUNTROWS(SIRA_Submission_Error_Report),
+        MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
         SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate
+        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
-
--- DOLLAR VALUE branch
--- SUMX over distinct valid claims only
-VAR DollarResult =
-    SUMX(
-        ValidClaims,
-        CALCULATE(
-            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            FILTER(
-                SIRA_Submission_Error_Report,
-                SIRA_Submission_Error_Report[%AggrKey] 
-                    IN InsurerAggrKeys
-                && SIRA_Submission_Error_Report[exclusion_type] = "N"
-                && SIRA_Submission_Error_Report[Rule Severity] = "Critical$"
-                && SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-                && SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate
-                && NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-            )
-        )
-    )
-
-RETURN
-    IF(ChartType = "Count", CountResult, DollarResult)
+)
