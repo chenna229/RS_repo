@@ -1,14 +1,35 @@
-Test_PrevKeyText =
+-- Test A value only
+Test_A_ErrorRate =
 VAR CurrentPeriodKey =
     MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
+
+VAR PrevKeyText =
+    FORMAT(
+        EDATE(
+            DATE(
+                VALUE(LEFT(CurrentPeriodKey, 4)),
+                VALUE(MID(CurrentPeriodKey, 5, 2)),
+                1
+            ),
+        -1),
+    "YYYYMMDD"
+    )
+
+VAR PrevMaxProcessingDt =
+    CALCULATE(
+        MAX(SIRA_Submission_Error_Report[processing_dt]),
+        REMOVEFILTERS(Calendar),
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+    )
+
 RETURN
-FORMAT(
-    EDATE(
-        DATE(
-            VALUE(LEFT(CurrentPeriodKey, 4)),
-            VALUE(MID(CurrentPeriodKey, 5, 2)),
-            1
-        ),
-    -1),
-"YYYYMMDD"
+CALCULATE(
+    DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+    REMOVEFILTERS(Calendar),
+    SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
+    SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
+    SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+    SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+    SIRA_Submission_Error_Report[exclusion_type] = "N"
 )
