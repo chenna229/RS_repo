@@ -10,20 +10,26 @@ let
             and [Rule Severity] = "Critical$"
     ),
 
-    // Step 2: Keep only needed columns
-    SelectedColumns = Table.SelectColumns(
+    // Step 2: Find MAX processing_dt
+    MaxDate = List.Max(FilteredRows[processing_dt]),
+
+    // Step 3: Filter to latest processing date only
+    FilteredByDate = Table.SelectRows(
         FilteredRows,
+        each [processing_dt] = MaxDate
+    ),
+
+    // Step 4: Keep only needed columns
+    SelectedColumns = Table.SelectColumns(
+        FilteredByDate,
         {
             "source_claim_nbr",
             "processing_dt",
-            "pit_payment_amt",
-            "rule_cd",
-            "Rule Severity"
+            "pit_payment_amt"
         }
     ),
 
-    // Step 3: Group by claim + processing_dt
-    // Get MAX pit_payment_amt per claim per date
+    // Step 5: Group by claim + processing_dt
     GroupedRows = Table.Group(
         SelectedColumns,
         {
@@ -41,27 +47,3 @@ let
 
 in
     GroupedRows
-
-
-
-Claim_Payment_Aggregated
-
-
-
-Error Volume =
-
-VAR ChartType =
-    SELECTEDVALUE(ChartToggle[TYPE], "Count")
-
-VAR CountResult =
-    CALCULATE(
-        COUNTROWS(SIRA_Submission_Error_Report),
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
-VAR DollarResult =
-    SUM(Claim_Payment_Aggregated[max_pit_payment])
-
-RETURN
-    IF(ChartType = "Count", CountResult, DollarResult)
