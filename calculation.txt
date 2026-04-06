@@ -1,32 +1,69 @@
-let
-    Source = SIRA_Submission_Error_Report,
+Error Rate =
 
-    // Without Rule Severity filter
-    FilteredRows = Table.SelectRows(
-        Source,
-        each [exclusion_type] = "N"
-            and [ErrorType] = "Proactive"
-            and [submission_period] = 202603
-            and [processing_dt] = #date(2026, 4, 4)
-    ),
+-- Current period
+VAR CurrentPeriod =
+    MAX(Sira_junction_table[submission_period])
 
-    // Count distinct claims WITH Critical$
-    CriticalClaims = List.Distinct(
-        Table.SelectRows(
-            FilteredRows,
-            each [Rule Severity] = "Critical$"
-        )[source_claim_nbr]
-    ),
+-- Previous period (minus 1 month)
+VAR PreviousPeriod =
+    VAR CurrentDate =
+        DATE(
+            LEFT(FORMAT(CurrentPeriod, "000000"), 4),
+            RIGHT(FORMAT(CurrentPeriod, "000000"), 2),
+            1
+        )
+    RETURN
+        INT(FORMAT(EDATE(CurrentDate, -1), "YYYYMM"))
 
-    // Count distinct claims WITHOUT Rule Severity filter
-    AllClaims = List.Distinct(
-        FilteredRows[source_claim_nbr]
-    ),
-
-    Result = #table(
-        {"Critical$ Claims", "All Claims"},
-        {{List.Count(CriticalClaims), List.Count(AllClaims)}}
+-- Max processing_dt for PREVIOUS period
+VAR PrevMaxProcessingDt =
+    CALCULATE(
+        MAX(SIRA_Submission_Error_Report[processing_dt]),
+        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
-in
-    Result
+-- Max processing_dt for CURRENT period
+VAR CurrMaxProcessingDt =
+    CALCULATE(
+        MAX(SIRA_Submission_Error_Report[processing_dt]),
+        SIRA_Submission_Error_Report[submission_period] = CurrentPeriod,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+    )
+
+-- A: Count ClaimandErrorCode at previous period max date
+VAR A =
+    CALCULATE(
+        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
+        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[exclusion_type] = "N"
+    )
+
+-- B: Count ClaimandErrorCode that existed in previous period
+-- AND still exist in current period (error_age_months > 0)
+VAR PrevPeriodCodes =
+    CALCULATETABLE(
+        VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt
+    )
+
+VAR B =
+    CALCULATE(
+        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+        SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
+        SIRA_Submission_Error_Report[submission_period] = CurrentPeriod,
+        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[error_age_months] > 0,
+        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
+    )
+
+-- C: Same as A (denominator)
+VAR C = A
+
+RETURN
+DIVIDE(A - B, C)
