@@ -1,19 +1,37 @@
-sum(aggr(
-    max({<exclusion_type={"N"},
-         [Rule Severity]={"Critical$"},
-         ErrorType={"Proactive"}>
-        } pit_payment_amt),
-    source_claim_nbr
-))
-
-
-Test_Total_NoInsurer =
+-- Test 1: Add processing_dt filter
+Test_WithDate =
+VAR vLatestDate = MAX(SIRA_Submission_Error_Report[processing_dt])
+RETURN
 SUMX(
     VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
         SIRA_Submission_Error_Report[exclusion_type] = "N",
         SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[processing_dt] = vLatestDate
+    )
+)
+
+
+-- Test 2: Add Suspect exclusion
+Test_WithSuspect =
+VAR vLatestDate = MAX(SIRA_Submission_Error_Report[processing_dt])
+VAR SuspectRules =
+    CALCULATETABLE(
+        VALUES(SIRA_Submission_Error_Report[rule_cd]),
+        ALL(SIRA_Submission_Error_Report),
+        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
+    )
+RETURN
+SUMX(
+    VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+    CALCULATE(
+        MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+        SIRA_Submission_Error_Report[exclusion_type] = "N",
+        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[processing_dt] = vLatestDate,
+        NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
     )
 )
