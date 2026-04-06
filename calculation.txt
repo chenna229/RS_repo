@@ -1,68 +1,64 @@
 Error Rate =
 
--- Current period
 VAR CurrentPeriod =
-    MAX(Sira_junction_table[submission_period])
+    MAX(SIRA_Submission_Error_Report[submission_period])
 
--- Previous period (minus 1 month)
 VAR PreviousPeriod =
-    VAR CurrentDate =
-        DATE(
-            LEFT(FORMAT(CurrentPeriod, "000000"), 4),
-            RIGHT(FORMAT(CurrentPeriod, "000000"), 2),
-            1
-        )
-    RETURN
-        INT(FORMAT(EDATE(CurrentDate, -1), "YYYYMM"))
+    INT(FORMAT(
+        EDATE(
+            DATE(
+                LEFT(FORMAT(CurrentPeriod, "000000"), 4),
+                RIGHT(FORMAT(CurrentPeriod, "000000"), 2),
+                1
+            ),
+        -1),
+    "YYYYMM"))
 
--- Max processing_dt for PREVIOUS period
 VAR PrevMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
+        REMOVEFILTERS(Calendar[MonthYear]),
         SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
--- Max processing_dt for CURRENT period
 VAR CurrMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
-        SIRA_Submission_Error_Report[submission_period] = CurrentPeriod,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
--- A: Count ClaimandErrorCode at previous period max date
 VAR A =
     CALCULATE(
         DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+        REMOVEFILTERS(Calendar[MonthYear]),
+        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
         SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
         SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
         SIRA_Submission_Error_Report[ErrorType] = "Proactive",
         SIRA_Submission_Error_Report[exclusion_type] = "N"
     )
 
--- B: Count ClaimandErrorCode that existed in previous period
--- AND still exist in current period (error_age_months > 0)
 VAR PrevPeriodCodes =
     CALCULATETABLE(
         VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+        REMOVEFILTERS(Calendar[MonthYear]),
         SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt
+        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
 VAR B =
     CALCULATE(
         DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
         SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
-        SIRA_Submission_Error_Report[submission_period] = CurrentPeriod,
+        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
         SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
         SIRA_Submission_Error_Report[ErrorType] = "Proactive",
         SIRA_Submission_Error_Report[error_age_months] > 0,
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
+        SIRA_Submission_Error_Report[exclusion_type] = "N"
     )
 
--- C: Same as A (denominator)
 VAR C = A
 
 RETURN
