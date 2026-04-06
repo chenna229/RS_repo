@@ -1,31 +1,32 @@
 Error Rate =
 
+-- Current period key from Calendar
 VAR CurrentPeriodKey =
     MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
 
-VAR CurrentPeriod =
-    LEFT(CurrentPeriodKey, 6)
-
-VAR PreviousPeriod =
-    FORMAT(
-        EDATE(
+-- Previous period key using Calendar table
+VAR PreviousPeriodKey =
+    CALCULATE(
+        MAX(Calendar[submissiondateno]),
+        REMOVEFILTERS(Calendar),
+        Calendar[Date] = EDATE(
             DATE(
-                LEFT(CurrentPeriod, 4),
-                VALUE(MID(CurrentPeriod, 5, 2)),
+                LEFT(FORMAT(CurrentPeriodKey,"00000000"), 4),
+                VALUE(MID(FORMAT(CurrentPeriodKey,"00000000"), 5, 2)),
                 1
             ),
-        -1),
-    "YYYYMM")
+        -1)
+    )
 
-VAR PreviousPeriodKey =
-    PreviousPeriod & "01"
+-- Previous period key as Integer
+VAR PrevKeyInt = VALUE(PreviousPeriodKey)
 
 -- Max processing_dt for PREVIOUS period
 VAR PrevMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
         REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyInt,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
@@ -41,7 +42,7 @@ VAR A =
     CALCULATE(
         DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
         REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyInt,
         SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
         SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
         SIRA_Submission_Error_Report[ErrorType] = "Proactive",
@@ -53,7 +54,7 @@ VAR PrevPeriodCodes =
     CALCULATETABLE(
         VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
         REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyInt,
         SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
