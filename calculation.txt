@@ -1,54 +1,64 @@
 Error Rate =
 
-VAR CurrentPeriod =
-    MAX(SIRA_Submission_Error_Report[submission_period])
+VAR CurrentPeriodKey =
+    MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
 
--- Previous period as TEXT
+VAR CurrentPeriod =
+    LEFT(CurrentPeriodKey, 6)
+
 VAR PreviousPeriod =
     FORMAT(
         EDATE(
             DATE(
                 LEFT(CurrentPeriod, 4),
-                RIGHT(CurrentPeriod, 2),
+                VALUE(MID(CurrentPeriod, 5, 2)),
                 1
             ),
         -1),
     "YYYYMM")
 
+VAR PreviousPeriodKey =
+    PreviousPeriod & "01"
+
+-- Max processing_dt for PREVIOUS period
 VAR PrevMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
-        REMOVEFILTERS(Calendar[MonthYear]),
-        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
+        REMOVEFILTERS(Calendar),
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
+-- Max processing_dt for CURRENT period
 VAR CurrMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
+-- A: Count at previous period
 VAR A =
     CALCULATE(
         DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar[MonthYear]),
-        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
+        REMOVEFILTERS(Calendar),
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
         SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
         SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
         SIRA_Submission_Error_Report[ErrorType] = "Proactive",
         SIRA_Submission_Error_Report[exclusion_type] = "N"
     )
 
+-- Previous period codes
 VAR PrevPeriodCodes =
     CALCULATETABLE(
         VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar[MonthYear]),
-        SIRA_Submission_Error_Report[submission_period] = PreviousPeriod,
+        REMOVEFILTERS(Calendar),
+        SIRA_Submission_Error_Report[Submission_Period_Key] = PreviousPeriodKey,
         SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
+-- B: Carried over errors
 VAR B =
     CALCULATE(
         DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
