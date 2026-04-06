@@ -1,7 +1,5 @@
--- Test B components separately
-
--- Check PrevPeriodCodes count
-Test_PrevCodes =
+-- Test B without error_age_months filter
+Test_B_NoAge =
 VAR CurrentPeriodKey =
     MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
 
@@ -25,6 +23,12 @@ VAR PrevMaxProcessingDt =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
+VAR CurrMaxProcessingDt =
+    CALCULATE(
+        MAX(SIRA_Submission_Error_Report[processing_dt]),
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+    )
+
 VAR PrevPeriodCodes =
     CALCULATETABLE(
         VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
@@ -34,4 +38,13 @@ VAR PrevPeriodCodes =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
-RETURN COUNTROWS(PrevPeriodCodes)
+-- B without age filter
+RETURN
+CALCULATE(
+    DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
+    SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
+    SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
+    SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+    SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+    SIRA_Submission_Error_Report[exclusion_type] = "N"
+)
