@@ -1,75 +1,24 @@
-Error Volume =
+-- Is %AggrKey unique in error report?
+Test_AggrKey_Unique =
+COUNTROWS(SIRA_Submission_Error_Report)
+-
+DISTINCTCOUNT(SIRA_Submission_Error_Report[%AggrKey])
 
-VAR ChartType = 
-    SELECTEDVALUE(ChartToggle[TYPE], "Count")
 
-VAR vLatestProcessingdate = 
-    MAX(SIRA_Submission_Error_Report[processing_dt])
 
-VAR SuspectRules =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[rule_cd]),
-        ALL(SIRA_Submission_Error_Report),
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
-    )
-
--- Get AggrKeys from junction for selected Insurer
--- Breaks many-to-many by capturing keys first
-VAR InsurerKeys =
-    CALCULATETABLE(
-        DISTINCT(Sira_junction_table[%AggrKey]),
-        ALLEXCEPT(
-            Sira_junction_table,
-            Sira_junction_table[Insurer]
-        )
-    )
-
--- Apply InsurerKeys directly to error report
--- Avoids many-to-many fan-out
-VAR FilteredClaims =
-    CALCULATETABLE(
-        DISTINCT(SIRA_Submission_Error_Report[source_claim_nbr]),
-        TREATAS(
-            InsurerKeys,
-            SIRA_Submission_Error_Report[%AggrKey]
-        ),
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate,
-        NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-    )
-
--- COUNT branch
-VAR CountResult =
+-- How many rows share same %AggrKey?
+Test_AggrKey_Dupes =
+AVERAGEX(
+    VALUES(SIRA_Submission_Error_Report[%AggrKey]),
     CALCULATE(
-        COUNTROWS(SIRA_Submission_Error_Report),
-        TREATAS(
-            InsurerKeys,
-            SIRA_Submission_Error_Report[%AggrKey]
-        ),
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate
+        COUNTROWS(SIRA_Submission_Error_Report)
     )
+)
 
--- DOLLAR VALUE branch
-VAR DollarResult =
-    SUMX(
-        FilteredClaims,
-        CALCULATE(
-            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            TREATAS(
-                InsurerKeys,
-                SIRA_Submission_Error_Report[%AggrKey]
-            ),
-            SIRA_Submission_Error_Report[exclusion_type] = "N",
-            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-            SIRA_Submission_Error_Report[processing_dt] = vLatestProcessingdate,
-            NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-        )
-    )
 
-RETURN
-    IF(ChartType = "Count", CountResult, DollarResult)
+-- How many distinct %AggrKey in junction for EML?
+Test_Junction_EML_Keys =
+CALCULATE(
+    DISTINCTCOUNT(Sira_junction_table[%AggrKey]),
+    Sira_junction_table[Insurer] = "EML"
+)
