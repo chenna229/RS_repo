@@ -1,4 +1,4 @@
-Error Value =
+Over By =
 
 VAR CurrMaxProcessingDt =
     CALCULATE(
@@ -13,9 +13,8 @@ VAR SuspectRules =
         SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
     )
 
--- Sum of max pit_payment_amt per claim
--- Critical$ only, exclude Suspect rules
-VAR ErrorValue =
+-- C: Error value at latest date
+VAR C =
     SUMX(
         VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
         CALCULATE(
@@ -28,5 +27,19 @@ VAR ErrorValue =
         )
     )
 
+-- D: 1% of total payment at latest date
+VAR D =
+    SUMX(
+        FILTER(
+            AGGREGATE_MEASURES_SIRA,
+            FORMAT(AGGREGATE_MEASURES_SIRA[PROCESSING_DT], "YYYY-MM-DD")
+            = FORMAT(CurrMaxProcessingDt, "YYYY-MM-DD")
+        ),
+        AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]
+    ) * 0.01
+
+-- Result: max of (C - D, 0)
+VAR Result = C - D
+
 RETURN
-ErrorValue
+IF(Result > 0, Result, 0)
