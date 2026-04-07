@@ -1,78 +1,9 @@
-Error Rate =
-
-VAR CurrentPeriodKey =
-    MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
-
--- Previous period as TEXT "YYYYMMDD"
-VAR PrevKeyText =
-    FORMAT(
-        EDATE(
-            DATE(
-                VALUE(LEFT(CurrentPeriodKey, 4)),
-                VALUE(MID(CurrentPeriodKey, 5, 2)),
-                1
-            ),
-        -1),
-    "YYYYMMDD"
-    )
-
--- Max processing_dt for PREVIOUS period
-VAR PrevMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
--- Max processing_dt for CURRENT period
-VAR CurrMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
--- A: Count ClaimandErrorCode at previous period
-VAR A =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N"
-    )
-
--- Previous period codes
-VAR PrevPeriodCodes =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
--- B: Carried over errors
--- Try both number and text comparison for error_age_months
-VAR B =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[error_age_months] <> "0",
-        SIRA_Submission_Error_Report[error_age_months] <> ""
-    )
-
--- C = A (denominator)
-VAR C = A
-
--- Debug variables
-VAR Result = DIVIDE(A - B, C)
-
+-- Replace RETURN Result with this to debug
 RETURN
-Result
+SWITCH(
+    TRUE(),
+    A = 0, "A is blank - prev period not found",
+    B = 0, "B is 0 - no carried over errors found",
+    C = 0, "C is 0 - denominator blank",
+    Result
+)
