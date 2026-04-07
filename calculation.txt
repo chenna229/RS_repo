@@ -1,15 +1,40 @@
--- Test simple denominator
-Test_Denominator =
+Overall Error Rate% =
+
+VAR SuspectRules =
+    CALCULATETABLE(
+        VALUES(SIRA_Submission_Error_Report[rule_cd]),
+        ALL(SIRA_Submission_Error_Report),
+        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
+    )
+
 VAR CurrMaxProcessingDt =
     CALCULATE(
         MAX(SIRA_Submission_Error_Report[processing_dt]),
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
+VAR Numerator =
+    CALCULATE(
+        SUMX(
+            VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+            CALCULATE(
+                MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+                SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+                SIRA_Submission_Error_Report[exclusion_type] = "N",
+                SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+                SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
+                NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
+            )
+        )
+    )
+
+VAR Denominator =
+    CALCULATE(
+        SUM(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
+        AGGREGATE_MEASURES_SIRA[PROCESSING_DT] = CurrMaxProcessingDt,
+        REMOVEFILTERS(SIRA_Submission_Error_Report[Rule Severity]),
+        REMOVEFILTERS(SIRA_Submission_Error_Report[rule_cd])
+    )
+
 RETURN
-CALCULATE(
-    SUM(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
-    AGGREGATE_MEASURES_SIRA[PROCESSING_DT] = CurrMaxProcessingDt,
-    REMOVEFILTERS(SIRA_Submission_Error_Report[Rule Severity]),
-    REMOVEFILTERS(SIRA_Submission_Error_Report[rule_cd])
-)
+DIVIDE(Numerator, Denominator)
