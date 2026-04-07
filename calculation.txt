@@ -1,25 +1,10 @@
-Error_Rate_2A =
+Error Rate KPI =
 
-VAR CurrentPeriodKey =
-    MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
-
-VAR PrevKeyText =
-    FORMAT(
-        EDATE(
-            DATE(
-                VALUE(LEFT(CurrentPeriodKey, 4)),
-                VALUE(MID(CurrentPeriodKey, 5, 2)),
-                1
-            ),
-        -1),
-    "YYYYMMDD")
-
-VAR PrevMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+VAR SuspectRules =
+    CALCULATETABLE(
+        VALUES(SIRA_Submission_Error_Report[rule_cd]),
+        ALL(SIRA_Submission_Error_Report),
+        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
     )
 
 VAR CurrMaxProcessingDt =
@@ -28,187 +13,40 @@ VAR CurrMaxProcessingDt =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
--- A: Critical$ and Critical at previous period
-VAR A =
+-- Numerator: sum of max pit_payment_amt per claim
+VAR Numerator =
     CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] IN {"Critical$", "Critical"},
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N"
+        SUMX(
+            VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
+            CALCULATE(
+                MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
+                SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
+                SIRA_Submission_Error_Report[exclusion_type] = "N",
+                SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+                SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
+                NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
+            )
+        )
     )
 
-VAR PrevPeriodCodes =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] IN {"Critical$", "Critical"},
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
--- B: Carried over with age > 0
-VAR B =
+-- Denominator: max paymentAmt_PIT_Total
+-- grouped by DIMENSION_1_TXT, DIMENSION_2_TXT
+VAR Denominator =
     CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] IN {"Critical$", "Critical"},
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        VALUE(SIRA_Submission_Error_Report[error_age_months]) > 0
-    )
-
-VAR C = A
-
-RETURN
-DIVIDE(A - B, C)
-
-
-
-
-
-
-
-Error_Rate_2B =
-
-VAR CurrentPeriodKey =
-    MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
-
-VAR PrevKeyText =
-    FORMAT(
-        EDATE(
-            DATE(
-                VALUE(LEFT(CurrentPeriodKey, 4)),
-                VALUE(MID(CurrentPeriodKey, 5, 2)),
-                1
+        SUMX(
+            SUMMARIZE(
+                SIRA_Submission_Error_Report,
+                SIRA_Submission_Error_Report[DIMENSION_1_TXT],
+                SIRA_Submission_Error_Report[DIMENSION_2_TXT]
             ),
-        -1),
-    "YYYYMMDD")
-
-VAR PrevMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
+            CALCULATE(
+                MAX(SIRA_Submission_Error_Report[paymentAmt_PIT_Total]),
+                SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
+            )
+        ),
+        REMOVEFILTERS(SIRA_Submission_Error_Report[Rule Severity]),
+        REMOVEFILTERS(SIRA_Submission_Error_Report[rule_cd])
     )
-
-VAR CurrMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
-VAR A =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N"
-    )
-
-VAR PrevPeriodCodes =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
-VAR B =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        VALUE(SIRA_Submission_Error_Report[error_age_months]) > 0
-    )
-
-VAR C = A
 
 RETURN
-DIVIDE(A - B, C)
-
-
-
-Error_Rate_2C =
-
-VAR CurrentPeriodKey =
-    MAX(SIRA_Submission_Error_Report[Submission_Period_Key])
-
-VAR PrevKeyText =
-    FORMAT(
-        EDATE(
-            DATE(
-                VALUE(LEFT(CurrentPeriodKey, 4)),
-                VALUE(MID(CurrentPeriodKey, 5, 2)),
-                1
-            ),
-        -1),
-    "YYYYMMDD")
-
-VAR PrevMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
-VAR CurrMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
--- A: Suspect with age > 2
-VAR A =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        VALUE(SIRA_Submission_Error_Report[error_age_months]) > 2
-    )
-
-VAR PrevPeriodCodes =
-    CALCULATETABLE(
-        VALUES(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        REMOVEFILTERS(Calendar),
-        SIRA_Submission_Error_Report[Submission_Period_Key] = PrevKeyText,
-        SIRA_Submission_Error_Report[processing_dt] = PrevMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        VALUE(SIRA_Submission_Error_Report[error_age_months]) > 2
-    )
-
--- B: Carried over with age > 3
-VAR B =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[ClaimandErrorCode]),
-        SIRA_Submission_Error_Report[ClaimandErrorCode] IN PrevPeriodCodes,
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        VALUE(SIRA_Submission_Error_Report[error_age_months]) > 3
-    )
-
-VAR C = A
-
-RETURN
-DIVIDE(A - B, C)
+DIVIDE(Numerator, Denominator)
