@@ -1,4 +1,4 @@
-Over By =
+Total Errors =
 
 VAR CurrMaxProcessingDt =
     CALCULATE(
@@ -6,40 +6,13 @@ VAR CurrMaxProcessingDt =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
-VAR SuspectRules =
-    CALCULATETABLE(
-        DISTINCT(SIRA_Submission_Error_Report[rule_cd]),
-        ALL(SIRA_Submission_Error_Report),
-        SIRA_Submission_Error_Report[Rule Severity] = "Suspect"
+VAR TotalErrors =
+    CALCULATE(
+        DISTINCTCOUNT(SIRA_Submission_Error_Report[rule_cd]),
+        SIRA_Submission_Error_Report[exclusion_type] = "N",
+        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
+        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
     )
-
--- C: Error value at latest date
-VAR C =
-    SUMX(
-        VALUES(SIRA_Submission_Error_Report[source_claim_nbr]),
-        CALCULATE(
-            MAX(SIRA_Submission_Error_Report[pit_payment_amt]),
-            SIRA_Submission_Error_Report[Rule Severity] = "Critical$",
-            SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-            SIRA_Submission_Error_Report[exclusion_type] = "N",
-            SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt,
-            NOT SIRA_Submission_Error_Report[rule_cd] IN SuspectRules
-        )
-    )
-
--- D: 1% of total payment at latest date
-VAR D =
-    SUMX(
-        FILTER(
-            AGGREGATE_MEASURES_SIRA,
-            FORMAT(AGGREGATE_MEASURES_SIRA[PROCESSING_DT], "YYYY-MM-DD")
-            = FORMAT(CurrMaxProcessingDt, "YYYY-MM-DD")
-        ),
-        AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]
-    ) * 0.01
-
--- Result: max of (C - D, 0)
-VAR Result = C - D
 
 RETURN
-IF(Result > 0, Result, 0)
+TotalErrors
