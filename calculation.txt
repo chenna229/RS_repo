@@ -29,22 +29,11 @@ VAR Numerator =
         )
     )
 
--- Denominator
--- PROCESSING_DT in AGGREGATE_MEASURES_SIRA is Date type
+-- Denominator - simple SUM approach
 VAR Denominator =
     CALCULATE(
-        SUMX(
-            SUMMARIZE(
-                AGGREGATE_MEASURES_SIRA,
-                AGGREGATE_MEASURES_SIRA[DIMENSION_1_TXT],
-                AGGREGATE_MEASURES_SIRA[DIMENSION_2_TXT]
-            ),
-            CALCULATE(
-                MAX(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
-                -- Compare Date to Date directly
-                AGGREGATE_MEASURES_SIRA[PROCESSING_DT] = CurrMaxProcessingDt
-            )
-        ),
+        SUM(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
+        AGGREGATE_MEASURES_SIRA[PROCESSING_DT] = CurrMaxProcessingDt,
         REMOVEFILTERS(SIRA_Submission_Error_Report[Rule Severity]),
         REMOVEFILTERS(SIRA_Submission_Error_Report[rule_cd])
     )
