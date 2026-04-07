@@ -1,4 +1,4 @@
-Total Errors =
+Total Payments =
 
 VAR CurrMaxProcessingDt =
     CALCULATE(
@@ -6,13 +6,27 @@ VAR CurrMaxProcessingDt =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
-VAR TotalErrors =
-    CALCULATE(
-        DISTINCTCOUNT(SIRA_Submission_Error_Report[rule_cd]),
-        SIRA_Submission_Error_Report[exclusion_type] = "N",
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive",
-        SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
+VAR CurrMaxProcessingDtText =
+    FORMAT(CurrMaxProcessingDt, "YYYY-MM-DD")
+
+VAR TotalPayments =
+    SUMX(
+        SUMMARIZE(
+            AGGREGATE_MEASURES_SIRA,
+            AGGREGATE_MEASURES_SIRA[DIMENSION_1_TXT],
+            AGGREGATE_MEASURES_SIRA[DIMENSION_2_TXT]
+        ),
+        CALCULATE(
+            MAX(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
+            FILTER(
+                AGGREGATE_MEASURES_SIRA,
+                FORMAT(
+                    AGGREGATE_MEASURES_SIRA[PROCESSING_DT],
+                    "YYYY-MM-DD"
+                ) = CurrMaxProcessingDtText
+            )
+        )
     )
 
 RETURN
-TotalErrors
+TotalPayments
