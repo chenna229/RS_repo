@@ -1,4 +1,4 @@
-Error Rate KPI =
+Overall Error Rate% =
 
 VAR SuspectRules =
     CALCULATETABLE(
@@ -13,7 +13,7 @@ VAR CurrMaxProcessingDt =
         SIRA_Submission_Error_Report[ErrorType] = "Proactive"
     )
 
--- Numerator: sum of max pit_payment_amt per claim
+-- Numerator
 VAR Numerator =
     CALCULATE(
         SUMX(
@@ -29,19 +29,20 @@ VAR Numerator =
         )
     )
 
--- Denominator: max paymentAmt_PIT_Total
--- grouped by DIMENSION_1_TXT, DIMENSION_2_TXT
+-- Denominator
+-- PROCESSING_DT in AGGREGATE_MEASURES_SIRA is Date type
 VAR Denominator =
     CALCULATE(
         SUMX(
             SUMMARIZE(
-                SIRA_Submission_Error_Report,
-                SIRA_Submission_Error_Report[DIMENSION_1_TXT],
-                SIRA_Submission_Error_Report[DIMENSION_2_TXT]
+                AGGREGATE_MEASURES_SIRA,
+                AGGREGATE_MEASURES_SIRA[DIMENSION_1_TXT],
+                AGGREGATE_MEASURES_SIRA[DIMENSION_2_TXT]
             ),
             CALCULATE(
-                MAX(SIRA_Submission_Error_Report[paymentAmt_PIT_Total]),
-                SIRA_Submission_Error_Report[processing_dt] = CurrMaxProcessingDt
+                MAX(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
+                -- Compare Date to Date directly
+                AGGREGATE_MEASURES_SIRA[PROCESSING_DT] = CurrMaxProcessingDt
             )
         ),
         REMOVEFILTERS(SIRA_Submission_Error_Report[Rule Severity]),
