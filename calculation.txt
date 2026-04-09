@@ -1,3 +1,1 @@
-Hi Paul,
-
-I’ll be busy with the DQ dashboard work over the next few days. Would it be possible to make me optional for the Alignment meeting? Please feel free to include me directly if needed.
+"I'm still working on the NI SIRA dashboard analysis. I've raised a request for DMS designer access — once I get that I can pull the Excel for deeper analysis."
