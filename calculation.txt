@@ -1,32 +1,3 @@
-Total Payments =
+Hi Paul,
 
-VAR CurrMaxProcessingDt =
-    CALCULATE(
-        MAX(SIRA_Submission_Error_Report[processing_dt]),
-        SIRA_Submission_Error_Report[ErrorType] = "Proactive"
-    )
-
-VAR CurrMaxProcessingDtText =
-    FORMAT(CurrMaxProcessingDt, "YYYY-MM-DD")
-
-VAR TotalPayments =
-    SUMX(
-        SUMMARIZE(
-            AGGREGATE_MEASURES_SIRA,
-            AGGREGATE_MEASURES_SIRA[DIMENSION_1_TXT],
-            AGGREGATE_MEASURES_SIRA[DIMENSION_2_TXT]
-        ),
-        CALCULATE(
-            MAX(AGGREGATE_MEASURES_SIRA[paymentAmt_PIT_Total]),
-            FILTER(
-                AGGREGATE_MEASURES_SIRA,
-                FORMAT(
-                    AGGREGATE_MEASURES_SIRA[PROCESSING_DT],
-                    "YYYY-MM-DD"
-                ) = CurrMaxProcessingDtText
-            )
-        )
-    )
-
-RETURN
-TotalPayments
+I’ll be busy with the DQ dashboard work over the next few days. Would it be possible to make me optional for the Alignment meeting? Please feel free to include me directly if needed.
