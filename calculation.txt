@@ -1,1 +1,16 @@
-Field (Qlik)StatusSource in Snowflake Queryrule_cd✅ Founddq.DQ_RULE_OCCURRENCE_IDrule_desc✅ Founddq.DQ_RULE_OCCURRENCE_NAMEcolumn_name✅ Founddq.DQ_FIELD_NAMEerroneous_value✅ Founddq.DQ_FIELD_VALseverity✅ Founddq.IMPACTprocessing_dt✅ Founddq.RUN_DATEsubmission_period⚠️ DerivedTO_CHAR(dq.RUN_DATE, 'YYYYMM') — but Qlik has separate submission_period_proactive & submission_period_sser, logic unclearclaim_number✅ Foundcc_claim."ClaimNumber"sira_claim_number✅ Foundcc_claim."SIRAClaimNumber_Ext"loss_date✅ Foundcc_claim."LossDate"close_date✅ Foundcc_claim."CloseDate"reopen_date✅ Foundcc_claim."ReOpenDate"managing_entity_cd✅ Foundccx_managingentity_icare."Code"managing_entity_name✅ Foundccx_managingentity_icare."Name"insurer_number✅ Foundcctl_claimagent_icare."TYPECODE" (with fallback)policy_number✅ Foundcc_policy."PolicyNumber"policy_type_cd✅ Foundcctl_policytype."TYPECODE"transaction_id✅ Foundtxn."ID"payment_type✅ Foundtxn."PaymentType"submit_date✅ Foundtxn."SubmitDate"transaction_status✅ Foundtxn."Status"transaction_amount✅ Foundtli."TransactionAmount"error_age_months❌ Not FoundUnknown — how is age calculated?submission_period_proactive❌ Not FoundSeparate field from Qlik — source unknownsubmission_period_sser❌ Not FoundSeparate field from Qlik — source unknownErrorOwner / ErrorOwnerGroup❌ Not Founde.g. CM / Case ManagerErrorSource❌ Not Founde.g. iCareErrorType❌ Not Founde.g. ProactivePreExistingErrorFlag❌ Not Found0/1 flagUnCompletedErrorFlag❌ Not Found0/1 flagProactiveRank / ReactiveRank❌ Not FoundUnknown sourcefirst_submission / first_point_of❌ Not FoundUnknown sourcepit_payment_amt❌ Not FoundPoint-in-time paymentpaymentAmt_total / recoveryAmt❌ Not FoundAggregated payment fieldsClaimsOfficer❌ Not FoundOfficer name — which table?ClaimStatus description❌ Not FoundHave state ID, not the labelClaimURL❌ Not FoundUnknown sourceLiabilityStatusDesc❌ Not FoundUnknown sourceTeamName / TeamType❌ Not FoundUnknown sourceWorkStatusDesc❌ Not FoundUnknown sourceattributes_used❌ Not FoundUnknown sourceevent_name / exclusion_type / field_value❌ Not FoundUnknown source
+SELECT 
+    TABLE_SCHEMA,
+    TABLE_NAME,
+    COLUMN_NAME,
+    DATA_TYPE
+FROM DATALAKE_CURATED_DEV.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'D253_GWCC'
+  AND (
+    UPPER(COLUMN_NAME) LIKE '%OFFICER%'
+    OR UPPER(COLUMN_NAME) LIKE '%MANAGER%'
+    OR UPPER(COLUMN_NAME) LIKE '%ASSIGN%'
+    OR UPPER(COLUMN_NAME) LIKE '%OWNER%'
+    OR UPPER(COLUMN_NAME) LIKE '%HANDLER%'
+    OR UPPER(COLUMN_NAME) LIKE '%USER%'
+  )
+ORDER BY TABLE_NAME, COLUMN_NAME;
