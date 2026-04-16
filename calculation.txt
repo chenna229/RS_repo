@@ -1,7 +1,50 @@
--- Check what payment views exist in D253_GWCC
-SELECT TABLE_NAME
-FROM DATALAKE_CURATED_DEV.INFORMATION_SCHEMA.TABLES
-WHERE TABLE_SCHEMA = 'D253_GWCC'
-AND TABLE_NAME LIKE '%payment%'
-OR TABLE_NAME LIKE '%sira%'
-ORDER BY TABLE_NAME;
+SELECT
+    -- Error fields from DQHUB
+    dq.DQ_RULE_OCCURRENCE_ID            AS rule_cd,
+    dq.DQ_RULE_OCCURRENCE_NAME          AS rule_desc,
+    dq.BUSINESS_KEY_VAL                 AS claim_number_raw,
+    dq.DQ_FIELD_NAME                    AS column_name,
+    dq.DQ_FIELD_VAL                     AS erroneous_value,
+    dq.IMPACT                           AS severity,
+    dq.RUN_DATE                         AS processing_dt,
+    TO_CHAR(dq.RUN_DATE, 'YYYYMM')      AS submission_period,
+
+    -- Claim fields
+    cl."PublicID"                       AS claim_public_id,
+    cl."MANAGING_ENTITY_CD"             AS managing_entity_cd,
+    cl."INSURERNUMBER"                  AS insurer_number,
+    cl."ClaimNumber"                    AS claim_number,
+    cl."AssignedUserID"                 AS assigned_user_id,
+    cl."AssignedGroupID"                AS assigned_group_id,
+    cl."SIRAClaimNumber_Ext"            AS sira_claim_number,
+    cl."LossDate"                       AS loss_date,
+    cl."CloseDate"                      AS close_date,
+    cl."ReOpenDate"                     AS reopen_date,
+    cl."State"                          AS state,
+    cl."PolicyID"                       AS policy_id,
+    cl."Retired"                        AS retired,
+
+    -- Payment fields
+    pay."TransactionAmount"             AS payment_amt,
+    pay."Paycode"                       AS paycode,
+    pay."StatusName"                    AS payment_status,
+    pay."DateFrom_icare"                AS payment_date_from,
+    pay."DateTo_icare"                  AS payment_date_to,
+    pay."HoursLost_icare"               AS hours_lost,
+    pay."WeeklyBenefitRate_icare"       AS weekly_benefit_rate
+
+FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
+
+-- Join to claim
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."v_cc_claim" cl
+    ON cl."PublicID" = dq.BUSINESS_KEY_VAL
+
+-- Join to payments from D253_GWCC
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."v_sira_c_2_5_payments" pay
+    ON pay."ClaimNumber" = cl."ClaimNumber"
+
+WHERE dq.TABLE_NAME = 'cc_claim'
+AND dq.BUSINESS_KEY = 'PublicID'
+AND cl."MANAGING_ENTITY_CD" LIKE 'NI_%'
+
+LIMIT 100;
