@@ -1,22 +1,101 @@
 SELECT
-    c."ClaimNumber",
-    p."CaseOwnerName",
-    p."CaseOwnerTeamName",
-    ms."IsCaseManager",
-    gu."Manager"
-FROM DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" c
+    -- Error fields from DQHUB
+    dq.DQ_RULE_OCCURRENCE_ID                                        AS rule_cd,
+    dq.DQ_RULE_OCCURRENCE_NAME                                      AS rule_desc,
+    dq.BUSINESS_KEY_VAL                                             AS claim_number_raw,
+    dq.DQ_FIELD_NAME                                                AS column_name,
+    dq.DQ_FIELD_VAL                                                 AS erroneous_value,
+    dq.IMPACT                                                       AS severity,
+    dq.RUN_DATE                                                     AS processing_dt,
+    TO_CHAR(dq.RUN_DATE, 'YYYYMM')                                  AS submission_period,
 
-LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" p
-    ON p."ID" = c."ID"
-    AND p."CURRENT_RECORD_FLAG" = TRUE
+    -- Claim fields
+    cc_claim."PublicID"                                             AS claim_public_id,
+    ccx_managingentity_icare."Code"                                 AS managing_entity_cd,
+    ccx_managingentity_icare."Name"                                 AS managing_entity_name,
+    NVL(cctl_claimagent_icare1."TYPECODE",
+        cctl_claimagent_icare2."TYPECODE")                          AS insurer_number,
+    cc_policy."PolicyNumber"                                        AS policy_number,
+    cc_policy."PolicyType"                                          AS policy_type_id,
+    cctl_policytype."TYPECODE"                                      AS policy_type_cd,
+    cc_claim."AssignedUserID"                                       AS assigned_user_id,
+    cc_claim."AssignedGroupID"                                      AS assigned_group_id,
+    cc_claim."SIRAClaimNumber_Ext"                                  AS sira_claim_number,
+    cc_claim."ClaimNumber"                                          AS claim_number,
+    cc_claim."LossDate"                                             AS loss_date,
+    cc_claim."CloseDate"                                            AS close_date,
+    cc_claim."ReOpenDate"                                           AS reopen_date,
+    cc_claim."State"                                                AS state,
+    cc_claim."PolicyID"                                             AS policy_id,
+    cc_claim."Retired"                                              AS retired,
+    cc_claim."Currency"                                             AS currency,
 
-LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_msprecommendation_ext" ms
-    ON ms."ID" = c."ID"
-    AND ms."CURRENT_RECORD_FLAG" = TRUE
+    -- Case owner fields
+    pia."CaseOwnerName"                                             AS claims_officer,
+    pia."CaseOwnerTeamName"                                         AS team_name,
 
-LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_groupuser" gu
-    ON gu."UserID" = c."AssignedUserID"
-    AND gu."CURRENT_RECORD_FLAG" = TRUE
+    -- Transaction fields
+    txn."ID"                                                        AS transaction_id,
+    txn."PublicID"                                                  AS transaction_public_id,
+    txn."PaymentType"                                               AS payment_type,
+    txn."SubmitDate"                                                AS submit_date,
+    txn."Status"                                                    AS transaction_status,
+    txn."CreateTime"                                                AS transaction_create_time,
+    txn."UpdateTime"                                                AS transaction_update_time,
 
-WHERE c."CURRENT_RECORD_FLAG" = TRUE
-LIMIT 10;
+    -- Transaction line item fields
+    tli."ID"                                                        AS line_item_id,
+    tli."TransactionAmount"                                         AS transaction_amount
+
+FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
+
+-- Join to claim
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" cc_claim
+    ON cc_claim."PublicID" = dq.BUSINESS_KEY_VAL
+    AND cc_claim."CURRENT_RECORD_FLAG" = TRUE
+
+-- Case owner name and team
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" pia
+    ON pia."ID" = cc_claim."ID"
+    AND pia."CURRENT_RECORD_FLAG" = TRUE
+
+-- Managing entity
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_managingentity_icare" ccx_managingentity_icare
+    ON ccx_managingentity_icare."ID" = cc_claim."ManagingEntity_icare"
+    AND ccx_managingentity_icare."CURRENT_RECORD_FLAG" = TRUE
+
+-- Claims agent (insurer number - primary)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare" cctl_claimagent_icare1
+    ON cctl_claimagent_icare1."ID" = cc_claim."ClaimsAgent_icare"
+    AND cctl_claimagent_icare1."CURRENT_RECORD_FLAG" = TRUE
+
+-- Claims agent replica (insurer number - fallback)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare_replica" cctl_claimagent_icare2
+    ON cctl_claimagent_icare2."ID" = cc_claim."LodgingAgent_icare"
+    AND cctl_claimagent_icare2."CURRENT_RECORD_FLAG" = TRUE
+
+-- Policy
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_policy" cc_policy
+    ON cc_policy."ID" = cc_claim."PolicyID"
+    AND cc_policy."CURRENT_RECORD_FLAG" = TRUE
+
+-- Policy type
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_policytype" cctl_policytype
+    ON cctl_policytype."ID" = cc_policy."PolicyType"
+    AND cctl_policytype."CURRENT_RECORD_FLAG" = TRUE
+
+-- Transaction
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transaction" txn
+    ON txn."ClaimID" = cc_claim."ID"
+    AND txn."CURRENT_RECORD_FLAG" = TRUE
+
+-- Transaction line item
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transactionlineitem" tli
+    ON tli."TransactionID" = txn."ID"
+    AND tli."CURRENT_RECORD_FLAG" = TRUE
+
+WHERE dq.TABLE_NAME = 'cc_claim'
+AND dq.BUSINESS_KEY = 'PublicID'
+AND ccx_managingentity_icare."Code" LIKE 'NI_%'
+
+LIMIT 100;
