@@ -1,16 +1,17 @@
-SELECT 
-    TABLE_SCHEMA,
-    TABLE_NAME,
-    COLUMN_NAME,
-    DATA_TYPE
-FROM DATALAKE_CURATED_DEV.INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = 'D253_GWCC'
-  AND (
-    UPPER(COLUMN_NAME) LIKE '%OFFICER%'
-    OR UPPER(COLUMN_NAME) LIKE '%MANAGER%'
-    OR UPPER(COLUMN_NAME) LIKE '%ASSIGN%'
-    OR UPPER(COLUMN_NAME) LIKE '%OWNER%'
-    OR UPPER(COLUMN_NAME) LIKE '%HANDLER%'
-    OR UPPER(COLUMN_NAME) LIKE '%USER%'
-  )
-ORDER BY TABLE_NAME, COLUMN_NAME;
+Hi Manuel,
+
+Hope you are well. Zarko suggested I reach out to you for some clarification.
+
+I am currently working on migrating the NI SIRA Proactive dashboard from Qlik to Snowflake. I have attached my Snowflake query and a field mapping Excel for your reference.
+
+Note: I am querying D253 tables directly (e.g. cc_claim, cc_policy, cc_transaction) instead of the Snowflake views. The reason is that masking policies are applied on the views, so I used the direct tables to access the full data.
+
+The Excel shows which fields I have been able to map so far and which ones I could not find. Could you please help with the following:
+
+1. There are several fields from the Qlik view that I could not find in Snowflake. Could you help clarify where these come from or how they are sourced?
+
+2. For fields like error age and submission period, I am not sure how the values are calculated. Could you help explain the business logic behind these?
+
+Happy to jump on a call if that is easier.
+
+Thanks,
