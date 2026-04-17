@@ -1,17 +1,10 @@
-Hi Manuel,
-
-Hope you are well. Zarko suggested I reach out to you for some clarification.
-
-I am currently working on migrating the NI SIRA Proactive dashboard from Qlik to Snowflake. I have attached my Snowflake query and a field mapping Excel for your reference.
-
-Note: I am querying D253 tables directly (e.g. cc_claim, cc_policy, cc_transaction) instead of the Snowflake views. The reason is that masking policies are applied on the views, so I used the direct tables to access the full data.
-
-The Excel shows which fields I have been able to map so far and which ones I could not find. Could you please help with the following:
-
-1. There are several fields from the Qlik view that I could not find in Snowflake. Could you help clarify where these come from or how they are sourced?
-
-2. For fields like error age and submission period, I am not sure how the values are calculated. Could you help explain the business logic behind these?
-
-Happy to jump on a call if that is easier.
-
-Thanks,
+SELECT TOP 10
+    c."ClaimNumber",
+    p."CaseOwnerName",
+    p."CaseOwnerTeamName"
+FROM DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" c
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" p
+    ON p."ID" = c."ID"
+    AND p."CURRENT_RECORD_FLAG" = TRUE
+WHERE c."CURRENT_RECORD_FLAG" = TRUE
+LIMIT 10;
