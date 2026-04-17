@@ -1,10 +1,22 @@
-SELECT TOP 10
+SELECT
     c."ClaimNumber",
     p."CaseOwnerName",
-    p."CaseOwnerTeamName"
+    p."CaseOwnerTeamName",
+    ms."IsCaseManager",
+    gu."Manager"
 FROM DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" c
+
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" p
     ON p."ID" = c."ID"
     AND p."CURRENT_RECORD_FLAG" = TRUE
+
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_msprecommendation_ext" ms
+    ON ms."ID" = c."ID"
+    AND ms."CURRENT_RECORD_FLAG" = TRUE
+
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_groupuser" gu
+    ON gu."UserID" = c."AssignedUserID"
+    AND gu."CURRENT_RECORD_FLAG" = TRUE
+
 WHERE c."CURRENT_RECORD_FLAG" = TRUE
 LIMIT 10;
