@@ -56,7 +56,7 @@ SELECT
     cc_policy."PolicyType"                                          AS policy_type_id,
     cctl_policytype."TYPECODE"                                      AS policy_type_cd,
 
-    -- Case owner / Team (confirmed from Qlik script)
+    -- Case owner / Team
     pia."CaseOwnerName"                                             AS claims_officer,
     pia."CaseOwnerTeamName"                                         AS team_name,
 
@@ -66,35 +66,37 @@ SELECT
     txn."PaymentType"                                               AS payment_type,
     txn."SubmitDate"                                                AS submit_date,
     txn."Status"                                                    AS transaction_status,
+    txn."Subtype"                                                   AS transaction_subtype,
     txn."CreateTime"                                                AS transaction_create_time,
     txn."UpdateTime"                                                AS transaction_update_time,
+
+    -- Cost category (from D253)
+    cctl_costcategory."TYPECODE"                                    AS cost_category_cd,
+    cctl_costcategory."Name"                                        AS cost_category_name,
 
     -- Transaction line item
     tli."ID"                                                        AS line_item_id,
     tli."TransactionAmount"                                         AS transaction_amount,
 
-    -- Payment fields
-    pay.COSTCATEGORYCODE                                            AS cost_category_cd,
-    pay.COSTCATEGORYNAME                                            AS cost_category_name,
-    pay.TRANSACTIONTYPE                                             AS payment_transaction_type,
-    pay.TRANSACTIONSUBTYPE                                          AS payment_transaction_subtype,
-    pay.TRANSACTIONDATEYYYYMM                                       AS transaction_date_yyyymm,
-    pay.TRANSACTIONAMOUNT                                           AS pit_payment_amt,
-    pay.STATUS_CD                                                   AS payment_status_cd,
-    pay.ODGRTWDATE_ICARE                                            AS odgrtw_date,
-    pay.ODGDURATION_ICARE                                           AS odg_duration,
+    -- Payment amount (D253 - subtype 2, excluding recovery cost categories 70-77)
+    CASE
+        WHEN txn."Subtype" = '2'
+        AND cctl_costcategory."TYPECODE" NOT IN ('70','71','72','73','74','75','76','77')
+        THEN tli."TransactionAmount"
+        ELSE NULL
+    END                                                             AS pit_payment_amt,
 
-    -- Recovery fields
-    rec."TransactionAmount"                                         AS recovery_amt,
-    rec."TransactionDate"                                           AS recovery_transaction_date,
-    rec."Paycode"                                                   AS recovery_paycode,
-    rec."StatusCd"                                                  AS recovery_status_cd,
-    rec."StatusName"                                                AS recovery_status_name,
-    rec."AdjustmentPayment_icare"                                   AS adjustment_payment_icare
+    -- Recovery amount (D253 - subtype 3, recovery cost categories only)
+    CASE
+        WHEN txn."Subtype" = '3'
+        AND cctl_costcategory."TYPECODE" IN ('70','71','72','73','74','75','76','77')
+        THEN tli."TransactionAmount"
+        ELSE NULL
+    END                                                             AS recovery_amt
 
 FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
 
--- Join to claim (D253_GWCC)
+-- Join to claim (D253_GWCC) - filter early for performance
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" cc_claim
     ON cc_claim."PublicID" = dq.BUSINESS_KEY_VAL
     AND cc_claim."CURRENT_RECORD_FLAG" = TRUE
@@ -150,15 +152,19 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_losstype" lt
     AND lt."CURRENT_RECORD_FLAG" = TRUE
 
 -- Liability status latest per claim (D253_GWCC)
+-- Using subquery to get only latest record per ClaimWorkCompID for performance
 LEFT JOIN (
     SELECT "ClaimWorkCompID", "CTMLiabilityStatusDecisionDate", "LiabilityStatus"
     FROM (
-        SELECT tl.*,
-               ROW_NUMBER() OVER (
-                   PARTITION BY "ClaimWorkCompID"
-                   ORDER BY "CTMLiabilityStatusDecisionDate" DESC
-               ) AS row_num
-        FROM DATALAKE_CURATED_DEV.D253_GWCC."ccx_liabilitystatushist_icare" tl
+        SELECT
+            "ClaimWorkCompID",
+            "CTMLiabilityStatusDecisionDate",
+            "LiabilityStatus",
+            ROW_NUMBER() OVER (
+                PARTITION BY "ClaimWorkCompID"
+                ORDER BY "CTMLiabilityStatusDecisionDate" DESC
+            ) AS row_num
+        FROM DATALAKE_CURATED_DEV.D253_GWCC."ccx_liabilitystatushist_icare"
         WHERE "CURRENT_RECORD_FLAG" = TRUE
         AND "CTMLiabilityStatusDecisionDate" IS NOT NULL
         AND "LiabilityStatus" IS NOT NULL
@@ -172,22 +178,22 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_compensabilitydecision" clt
     AND clt."CURRENT_RECORD_FLAG" = TRUE
 
 -- Transaction (D253_GWCC)
+-- Only join relevant transaction statuses for performance (ISSUED, VOIDED)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transaction" txn
     ON txn."ClaimID" = cc_claim."ID"
     AND txn."CURRENT_RECORD_FLAG" = TRUE
+    AND txn."Status" IN ('1', '2')  -- 1=Issued, 2=Voided
 
 -- Transaction line item (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transactionlineitem" tli
     ON tli."TransactionID" = txn."ID"
     AND tli."CURRENT_RECORD_FLAG" = TRUE
+    AND tli."Retired" = FALSE
 
--- Payments (migration layer)
-LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_6_estimates_payments" pay
-    ON pay.CLAIMNUMBER = cc_claim."ClaimNumber"
-
--- Recoveries (migration layer)
-LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_5_recoveries" rec
-    ON rec."ClaimNumber" = cc_claim."ClaimNumber"
+-- Cost category (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_costcategory" cctl_costcategory
+    ON cctl_costcategory."ID" = txn."CostCategory"
+    AND cctl_costcategory."CURRENT_RECORD_FLAG" = TRUE
 
 WHERE dq.TABLE_NAME = 'cc_claim'
 AND dq.BUSINESS_KEY = 'PublicID'
