@@ -1,20 +1,189 @@
-SELECT TABLE_NAME, COLUMN_NAME
-FROM DATALAKE_CURATED_DEV.INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = 'D253_GWCC'
-AND (
-    UPPER(TABLE_NAME) LIKE '%INSURER%'
-    OR UPPER(TABLE_NAME) LIKE '%INSURER_CONTROL%'
-    OR UPPER(COLUMN_NAME) LIKE '%INSURER_NUMBER%'
-    OR UPPER(COLUMN_NAME) LIKE '%ACTIVE_IND%'
-)
-ORDER BY TABLE_NAME, COLUMN_NAME;
+SELECT
+    -- Error fields from DQHUB
+    dq.DQ_RULE_OCCURRENCE_ID                                        AS rule_cd,
+    dq.DQ_RULE_OCCURRENCE_NAME                                      AS rule_desc,
+    dq.BUSINESS_KEY_VAL                                             AS claim_number_raw,
+    dq.DQ_FIELD_NAME                                                AS column_name,
+    dq.DQ_FIELD_VAL                                                 AS erroneous_value,
+    dq.IMPACT                                                       AS severity,
+    dq.RUN_DATE                                                     AS processing_dt,
+    TO_CHAR(dq.RUN_DATE, 'YYYYMM')                                  AS submission_period,
 
+    -- ErrorType hardcoded as Proactive (confirmed from Qlik script)
+    'Proactive'                                                     AS error_type,
 
-SELECT TABLE_NAME, COLUMN_NAME
-FROM DATALAB_CDQ_HUB_DEV.INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = 'D253_DQU'
-AND (
-    UPPER(TABLE_NAME) LIKE '%INSURER%'
-    OR UPPER(COLUMN_NAME) LIKE '%INSURER%'
-)
-ORDER BY TABLE_NAME, COLUMN_NAME;
+    -- Claim fields
+    cc_claim."PublicID"                                             AS claim_public_id,
+    cc_claim."ClaimNumber"                                          AS claim_number,
+    cc_claim."SIRAClaimNumber_Ext"                                  AS sira_claim_number,
+    cc_claim."LossDate"                                             AS loss_date,
+    cc_claim."CloseDate"                                            AS close_date,
+    cc_claim."ReOpenDate"                                           AS reopen_date,
+    cc_claim."State"                                                AS state,
+    cc_claim."PolicyID"                                             AS policy_id,
+    cc_claim."AssignedUserID"                                       AS assigned_user_id,
+    cc_claim."AssignedGroupID"                                      AS assigned_group_id,
+    cc_claim."Retired"                                              AS retired,
+    cc_claim."Currency"                                             AS currency,
+    CAST(COALESCE(cc_claim."ClaimWorkCompID", '0') AS VARCHAR)      AS fk_claimworkcompid,
+
+    -- ClaimURL (confirmed from Qlik script)
+    'https://claims.icare.nsw.gov.au/cc/Claim.do?claimNumber='
+        || LEFT(cc_claim."ClaimNumber", 7)                          AS claim_url,
+
+    -- Claim state description
+    St."TYPECODE"                                                   AS claim_state_desc,
+
+    -- Reopen reason
+    COR."TYPECODE"                                                  AS reopen_reason_cd,
+
+    -- Loss type
+    lt."TYPECODE"                                                   AS loss_type,
+
+    -- Liability status
+    ls."LiabilityStatus"                                            AS liability_status,
+    ls."CTMLiabilityStatusDecisionDate"                             AS liability_status_decision_date,
+    COALESCE(clt."TYPECODE", '00')                                  AS liability_status_desc,
+
+    -- Managing entity
+    ccx_managingentity_icare."Code"                                 AS managing_entity_cd,
+    ccx_managingentity_icare."Name"                                 AS managing_entity_name,
+
+    -- Insurer number (from v_DQHUB_CLAIM - already available in D253_DQU)
+    dqc.INSURER_NUMBER                                              AS insurer_number,
+
+    -- Policy fields
+    cc_policy."PolicyNumber"                                        AS policy_number,
+    cc_policy."PolicyType"                                          AS policy_type_id,
+    cctl_policytype."TYPECODE"                                      AS policy_type_cd,
+
+    -- Case owner / Team
+    pia."CaseOwnerName"                                             AS claims_officer,
+    pia."CaseOwnerTeamName"                                         AS team_name,
+
+    -- Transaction fields
+    txn."ID"                                                        AS transaction_id,
+    txn."PublicID"                                                  AS transaction_public_id,
+    txn."PaymentType"                                               AS payment_type,
+    txn."SubmitDate"                                                AS submit_date,
+    txn."Status"                                                    AS transaction_status,
+    txn."Subtype"                                                   AS transaction_subtype,
+    txn."CreateTime"                                                AS transaction_create_time,
+    txn."UpdateTime"                                                AS transaction_update_time,
+
+    -- Cost category
+    cctl_costcategory."TYPECODE"                                    AS cost_category_cd,
+
+    -- Transaction line item
+    tli."ID"                                                        AS line_item_id,
+    tli."TransactionAmount"                                         AS transaction_amount,
+
+    -- Payment amount (subtype 2, excluding recovery cost categories 70-77)
+    CASE
+        WHEN txn."Subtype" = '2'
+        AND cctl_costcategory."TYPECODE" NOT IN ('70','71','72','73','74','75','76','77')
+        THEN tli."TransactionAmount"
+        ELSE NULL
+    END                                                             AS pit_payment_amt,
+
+    -- Recovery amount (subtype 3, recovery cost categories only)
+    CASE
+        WHEN txn."Subtype" = '3'
+        AND cctl_costcategory."TYPECODE" IN ('70','71','72','73','74','75','76','77')
+        THEN tli."TransactionAmount"
+        ELSE NULL
+    END                                                             AS recovery_amt
+
+FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
+
+-- Join to DQHUB claim view for insurer number (D253_DQU)
+LEFT JOIN DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_CLAIM" dqc
+    ON dqc.BUSINESS_KEY_VAL = dq.BUSINESS_KEY_VAL
+
+-- Join to claim (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" cc_claim
+    ON cc_claim."PublicID" = dq.BUSINESS_KEY_VAL
+    AND cc_claim."CURRENT_RECORD_FLAG" = TRUE
+
+-- Case owner name and team (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" pia
+    ON pia."ID" = cc_claim."ID"
+    AND pia."CURRENT_RECORD_FLAG" = TRUE
+
+-- Managing entity (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_managingentity_icare" ccx_managingentity_icare
+    ON ccx_managingentity_icare."ID" = cc_claim."ManagingEntity_icare"
+    AND ccx_managingentity_icare."CURRENT_RECORD_FLAG" = TRUE
+
+-- Policy (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_policy" cc_policy
+    ON cc_policy."ID" = cc_claim."PolicyID"
+    AND cc_policy."CURRENT_RECORD_FLAG" = TRUE
+
+-- Policy type (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_policytype" cctl_policytype
+    ON cctl_policytype."ID" = cc_policy."PolicyType"
+    AND cctl_policytype."CURRENT_RECORD_FLAG" = TRUE
+
+-- Claim state description (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimstate" St
+    ON St."ID" = cc_claim."State"
+    AND St."CURRENT_RECORD_FLAG" = TRUE
+
+-- Reopen reason (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimreopenedreason" COR
+    ON COR."ID" = cc_claim."ReopenedReason"
+    AND COR."CURRENT_RECORD_FLAG" = TRUE
+
+-- Loss type (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_losstype" lt
+    ON lt."ID" = cc_claim."LossType"
+    AND lt."CURRENT_RECORD_FLAG" = TRUE
+
+-- Liability status latest per claim (D253_GWCC)
+LEFT JOIN (
+    SELECT "ClaimWorkCompID", "CTMLiabilityStatusDecisionDate", "LiabilityStatus"
+    FROM (
+        SELECT
+            "ClaimWorkCompID",
+            "CTMLiabilityStatusDecisionDate",
+            "LiabilityStatus",
+            ROW_NUMBER() OVER (
+                PARTITION BY "ClaimWorkCompID"
+                ORDER BY "CTMLiabilityStatusDecisionDate" DESC
+            ) AS row_num
+        FROM DATALAKE_CURATED_DEV.D253_GWCC."ccx_liabilitystatushist_icare"
+        WHERE "CURRENT_RECORD_FLAG" = TRUE
+        AND "CTMLiabilityStatusDecisionDate" IS NOT NULL
+        AND "LiabilityStatus" IS NOT NULL
+    ) WHERE row_num = 1
+) ls
+    ON ls."ClaimWorkCompID" = cc_claim."ClaimWorkCompID"
+
+-- Liability status description (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_compensabilitydecision" clt
+    ON clt."ID" = ls."LiabilityStatus"
+    AND clt."CURRENT_RECORD_FLAG" = TRUE
+
+-- Transaction (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transaction" txn
+    ON txn."ClaimID" = cc_claim."ID"
+    AND txn."CURRENT_RECORD_FLAG" = TRUE
+    AND txn."Status" IN ('1', '2')
+
+-- Transaction line item (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transactionlineitem" tli
+    ON tli."TransactionID" = txn."ID"
+    AND tli."CURRENT_RECORD_FLAG" = TRUE
+    AND tli."Retired" = FALSE
+
+-- Cost category (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_costcategory" cctl_costcategory
+    ON cctl_costcategory."ID" = txn."CostCategory"
+    AND cctl_costcategory."CURRENT_RECORD_FLAG" = TRUE
+
+WHERE dq.TABLE_NAME = 'cc_claim'
+AND dq.BUSINESS_KEY = 'PublicID'
+AND ccx_managingentity_icare."Code" LIKE 'NI_%'
+
+LIMIT 100;
