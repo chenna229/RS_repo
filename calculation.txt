@@ -88,11 +88,12 @@ SELECT
     pay.ODGDURATION_ICARE                                           AS odg_duration,
 
     -- Recovery fields
-    rec.TRANSACTIONAMOUNT                                           AS recovery_amt,
-    rec.TRANSACTIONDATE                                             AS recovery_transaction_date,
-    rec.PAYCODE                                                     AS recovery_paycode,
-    rec.STATUSCD                                                    AS recovery_status_cd,
-    rec.STATUSNAME                                                  AS recovery_status_name
+    rec."TransactionAmount"                                         AS recovery_amt,
+    rec."TransactionDate"                                           AS recovery_transaction_date,
+    rec."Paycode"                                                   AS recovery_paycode,
+    rec."StatusCd"                                                  AS recovery_status_cd,
+    rec."StatusName"                                                AS recovery_status_name,
+    rec."AdjustmentPayment_icare"                                   AS adjustment_payment_icare
 
 FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
 
@@ -148,7 +149,7 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimstate" St
     ON St."ID" = cc_claim."State"
     AND St."CURRENT_RECORD_FLAG" = TRUE
 
--- Reopen reason (D253_GWCC) - corrected table name
+-- Reopen reason (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimreopenedreason" COR
     ON COR."ID" = cc_claim."ReopenedReason"
     AND COR."CURRENT_RECORD_FLAG" = TRUE
@@ -158,7 +159,7 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_losstype" lt
     ON lt."ID" = cc_claim."LossType"
     AND lt."CURRENT_RECORD_FLAG" = TRUE
 
--- Liability status (D253_GWCC - latest per claim)
+-- Liability status latest per claim (D253_GWCC)
 LEFT JOIN (
     SELECT "ClaimWorkCompID", "CTMLiabilityStatusDecisionDate", "LiabilityStatus"
     FROM (
@@ -180,7 +181,7 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_compensabilitydecision" clt
     ON clt."ID" = ls."LiabilityStatus"
     AND clt."CURRENT_RECORD_FLAG" = TRUE
 
--- Workcomp (D253_GWCC - using view for extra fields)
+-- Workcomp view (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."v_cc_workcomp" WCS
     ON WCS."ID" = cc_claim."ClaimWorkCompID"
     AND WCS."CURRENT_RECORD_FLAG" = TRUE
@@ -201,7 +202,7 @@ LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_6_estimates_p
 
 -- Recoveries (migration layer - no D253 equivalent)
 LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_5_recoveries" rec
-    ON rec.CLAIMNUMBER = cc_claim."ClaimNumber"
+    ON rec."ClaimNumber" = cc_claim."ClaimNumber"
 
 WHERE dq.TABLE_NAME = 'cc_claim'
 AND dq.BUSINESS_KEY = 'PublicID'
