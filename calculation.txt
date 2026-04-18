@@ -49,8 +49,13 @@ SELECT
     ccx_managingentity_icare."Code"                                 AS managing_entity_cd,
     ccx_managingentity_icare."Name"                                 AS managing_entity_name,
 
-    -- Insurer number (from v_DQHUB_CLAIM - already available in D253_DQU)
-    dqc.INSURER_NUMBER                                              AS insurer_number,
+    -- Insurer number (from cctl_claimagent_icare - confirmed from view definition)
+    CAST(COALESCE(MAG."TYPECODE", LAG."TYPECODE") AS VARCHAR(5))    AS insurer_number,
+
+    -- Extra fields from v_DQHUB_CLAIM
+    dqc."C_2_1_7_BRANCH_OF_INSURER_HANDLING_CLAIM"                  AS branch_of_insurer,
+    dqc."C_2_5_7_PAYMENT_OR_RECOVERY_AMOUNT"                        AS payment_or_recovery_amt,
+    dqc."data_item_insurer"                                          AS data_item_insurer,
 
     -- Policy fields
     cc_policy."PolicyNumber"                                        AS policy_number,
@@ -96,9 +101,9 @@ SELECT
 
 FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
 
--- Join to DQHUB claim view for insurer number (D253_DQU)
+-- Join to DQHUB_CLAIM for extra fields (D253_DQU)
 LEFT JOIN DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_CLAIM" dqc
-    ON dqc.BUSINESS_KEY_VAL = dq.BUSINESS_KEY_VAL
+    ON dqc."PublicID" = dq.BUSINESS_KEY_VAL
 
 -- Join to claim (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" cc_claim
@@ -114,6 +119,16 @@ LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" pia
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_managingentity_icare" ccx_managingentity_icare
     ON ccx_managingentity_icare."ID" = cc_claim."ManagingEntity_icare"
     AND ccx_managingentity_icare."CURRENT_RECORD_FLAG" = TRUE
+
+-- Claims agent primary - MAG (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare" MAG
+    ON MAG."ID" = cc_claim."ClaimsAgent_icare"
+    AND MAG."CURRENT_RECORD_FLAG" = TRUE
+
+-- Claims agent fallback - LAG (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare" LAG
+    ON LAG."ID" = cc_claim."LodgingAgent_icare"
+    AND LAG."CURRENT_RECORD_FLAG" = TRUE
 
 -- Policy (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_policy" cc_policy
