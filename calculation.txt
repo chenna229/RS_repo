@@ -38,9 +38,6 @@ SELECT
     -- Loss type
     lt."TYPECODE"                                                   AS loss_type,
 
-    -- Reasonable excuse
-    RExc."TYPECODE"                                                 AS reasonable_excuse_cd,
-
     -- Liability status
     ls."LiabilityStatus"                                            AS liability_status,
     ls."CTMLiabilityStatusDecisionDate"                             AS liability_status_decision_date,
@@ -61,7 +58,7 @@ SELECT
     pia."CaseOwnerName"                                             AS claims_officer,
     pia."CaseOwnerTeamName"                                         AS team_name,
 
-    -- Work status (via workcomp)
+    -- Work status
     WCS."STATUS_CD"                                                 AS work_status_cd,
 
     -- Transaction fields
@@ -97,70 +94,69 @@ SELECT
 
 FROM DATALAB_CDQ_HUB_DEV.D253_DQU."v_DQHUB_INVALID_DATA" dq
 
--- Join to claim
-LEFT JOIN DATALAB_DATA_MIGRATION_DEV.D111_DQ_GWCC."v_cc_claim_current" cc_claim
+-- Join to claim (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_claim" cc_claim
     ON cc_claim."PublicID" = dq.BUSINESS_KEY_VAL
-    AND cc_claim."Retired" = 0
+    AND cc_claim."CURRENT_RECORD_FLAG" = TRUE
 
--- Submission period (1=1 as only 1 active row)
+-- Submission period (SIRA helper - no D253 equivalent)
 LEFT JOIN (
     SELECT SUBMISSION_PERIOD, SUBMISSION_PERIOD_END_DT, SUBMISSION_PERIOD_START_DT
     FROM DATALAB_SIRA_PROD.P001_HELPER.V_SIRA_SUBMISSION_PERIOD
     WHERE CURRENT_SUBMISSION_FLAG = 'Y'
 ) SubPeriod ON 1=1
 
--- Case owner name and team
+-- Case owner name and team (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_piaweindexremreport_ext" pia
     ON pia."ID" = cc_claim."ID"
     AND pia."CURRENT_RECORD_FLAG" = TRUE
 
--- Managing entity
+-- Managing entity (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."ccx_managingentity_icare" ccx_managingentity_icare
     ON ccx_managingentity_icare."ID" = cc_claim."ManagingEntity_icare"
     AND ccx_managingentity_icare."CURRENT_RECORD_FLAG" = TRUE
 
--- Claims agent primary (LAG - lodging agent)
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_claimagent_icare_current" LAG
-    ON cc_claim."LodgingAgent_icare" = LAG."ID"
+-- Claims agent primary - MAG (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare" MAG
+    ON MAG."ID" = cc_claim."ClaimsAgent_icare"
+    AND MAG."CURRENT_RECORD_FLAG" = TRUE
 
--- Claims agent (MAG - claims agent)
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_claimagent_icare_current" MAG
-    ON cc_claim."ClaimsAgent_icare" = MAG."ID"
+-- Claims agent fallback - LAG (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimagent_icare" LAG
+    ON LAG."ID" = cc_claim."LodgingAgent_icare"
+    AND LAG."CURRENT_RECORD_FLAG" = TRUE
 
--- Insurer control (for insurer name)
+-- Insurer control (SIRA prod - no D253 equivalent)
 LEFT JOIN DATALAB_SIRA_PROD.P001_CONSUMPTION."INSURER_CONTROL" IC
     ON IC."INSURER_NUMBER" = MAG."TYPECODE"
     AND IC."ACTIVE_IND" = 'Y'
 
--- Policy
+-- Policy (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_policy" cc_policy
     ON cc_policy."ID" = cc_claim."PolicyID"
     AND cc_policy."CURRENT_RECORD_FLAG" = TRUE
 
--- Policy type
+-- Policy type (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_policytype" cctl_policytype
     ON cctl_policytype."ID" = cc_policy."PolicyType"
     AND cctl_policytype."CURRENT_RECORD_FLAG" = TRUE
 
--- Claim state description
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_claimstate_current" St
+-- Claim state description (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_claimstate" St
     ON St."ID" = cc_claim."State"
-    AND St."Retired" = 0
+    AND St."CURRENT_RECORD_FLAG" = TRUE
 
--- Reopen reason
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_claimreopenedreason_current" COR
+-- Reopen reason (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_reopenreason" COR
     ON COR."ID" = cc_claim."ReopenedReason"
-    AND COR."Retired" = 0
+    AND COR."CURRENT_RECORD_FLAG" = TRUE
 
--- Loss type
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_losstype_current" lt
+-- Loss type (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_losstype" lt
     ON lt."ID" = cc_claim."LossType"
+    AND lt."CURRENT_RECORD_FLAG" = TRUE
 
--- Reasonable excuse (via workcomp)
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_reasonableexcuse_icare_current" RExc
-    ON RExc."ID" = WCS."ReasonableExcuse_icare"
-
--- Liability status (latest per claim)
+-- Liability status (D253_GWCC)
 LEFT JOIN (
     SELECT "ClaimWorkCompID", "CTMLiabilityStatusDecisionDate", "LiabilityStatus", "Run_id"
     FROM (
@@ -169,42 +165,39 @@ LEFT JOIN (
                    PARTITION BY "ClaimWorkCompID"
                    ORDER BY "CTMLiabilityStatusDecisionDate" DESC
                ) AS row_num
-        FROM DATALAKE_DATA_MIGRATION_DEV.D111_DQ_GWCC."v_ccx_liabilitystatushist_icare_current" tl
-        WHERE "Retired" = 0
+        FROM DATALAKE_CURATED_DEV.D253_GWCC."ccx_liabilitystatushist_icare" tl
+        WHERE "CURRENT_RECORD_FLAG" = TRUE
         AND "CTMLiabilityStatusDecisionDate" IS NOT NULL
         AND "LiabilityStatus" IS NOT NULL
     ) WHERE row_num = 1
 ) ls
     ON ls."ClaimWorkCompID" = cc_claim."ClaimWorkCompID"
-    AND ls."Run_id" = cc_claim."Run_id"
 
--- Liability status description
-LEFT JOIN DATALAKE_CURATED_PROD.P001_GWCC."v_cctl_compensabilitydecision_current" clt
+-- Liability status description (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cctl_compensabilitydecision" clt
     ON clt."ID" = ls."LiabilityStatus"
+    AND clt."CURRENT_RECORD_FLAG" = TRUE
 
--- Workcomp (for work status)
-LEFT JOIN (
-    SELECT * FROM DATALAB_DATA_MIGRATION_DEV.D111_DQ_GWCC."v_cc_workcomp_current"
-    WHERE "Retired" = 0
-) WCS
+-- Workcomp for work status (D253_GWCC)
+LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_workcomp" WCS
     ON WCS."ID" = cc_claim."ClaimWorkCompID"
-    AND WCS."Run_id" = cc_claim."Run_id"
+    AND WCS."CURRENT_RECORD_FLAG" = TRUE
 
--- Transaction
+-- Transaction (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transaction" txn
     ON txn."ClaimID" = cc_claim."ID"
     AND txn."CURRENT_RECORD_FLAG" = TRUE
 
--- Transaction line item
+-- Transaction line item (D253_GWCC)
 LEFT JOIN DATALAKE_CURATED_DEV.D253_GWCC."cc_transactionlineitem" tli
     ON tli."TransactionID" = txn."ID"
     AND tli."CURRENT_RECORD_FLAG" = TRUE
 
--- Payments
+-- Payments (no D253 equivalent - using migration layer)
 LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_6_estimates_payments" pay
     ON pay.CLAIMNUMBER = cc_claim."ClaimNumber"
 
--- Recoveries
+-- Recoveries (no D253 equivalent - using migration layer)
 LEFT JOIN DATALAKE_CURATED_DEV.D111_DATA_MIGRATION_AAL."v_sira_c_2_5_recoveries" rec
     ON rec.CLAIMNUMBER = cc_claim."ClaimNumber"
 
